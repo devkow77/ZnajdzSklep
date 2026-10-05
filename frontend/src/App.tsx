@@ -1,5 +1,9 @@
-import type { Map as MaplibreMap } from "maplibre-gl";
-import Map from "react-map-gl/maplibre";
+import { useEffect, useRef, useState } from "react";
+import type {
+  GeolocateControl as GeolocateControlInstance,
+  Map as MaplibreMap,
+} from "maplibre-gl";
+import Map, { GeolocateControl, Marker } from "react-map-gl/maplibre";
 import "maplibre-gl/dist/maplibre-gl.css";
 import {
   Select,
@@ -57,7 +61,34 @@ function lockZoom(map: MaplibreMap) {
   }
 }
 
+type UserLocation = {
+  longitude: number;
+  latitude: number;
+};
+
 const App = () => {
+  const geoControlRef = useRef<GeolocateControlInstance>(null);
+  const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    let timer = 0;
+    let tries = 0;
+
+    const tryTrigger = () => {
+      if (cancelled || tries > 25) return;
+      tries += 1;
+      if (geoControlRef.current?.trigger()) return;
+      timer = window.setTimeout(tryTrigger, 200);
+    };
+
+    timer = window.setTimeout(tryTrigger, 0);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, []);
+
   return (
     <div className="relative h-screen w-screen">
       <div className="fixed top-4 left-4 z-50 lg:hidden">
@@ -144,7 +175,38 @@ const App = () => {
           lockZoom(map);
           map.on("resize", () => lockZoom(map));
         }}
-      />
+      >
+        <GeolocateControl
+          ref={geoControlRef}
+          position="top-right"
+          positionOptions={{ enableHighAccuracy: true }}
+          trackUserLocation
+          showUserLocation={false}
+          showAccuracyCircle={false}
+          fitBoundsOptions={{ maxZoom: 14 }}
+          onGeolocate={(event) => {
+            setUserLocation({
+              longitude: event.coords.longitude,
+              latitude: event.coords.latitude,
+            });
+          }}
+        />
+        {userLocation && (
+          <Marker
+            longitude={userLocation.longitude}
+            latitude={userLocation.latitude}
+            anchor="center"
+          >
+            <div
+              title="Twoja lokalizacja"
+              className="pointer-events-none relative grid size-8 place-items-center"
+            >
+              <span className="absolute size-8 animate-ping rounded-full bg-yellow-400/70" />
+              <span className="size-3.5 rounded-full border-2 border-white bg-yellow-400 shadow-md" />
+            </div>
+          </Marker>
+        )}
+      </Map>
     </div>
   );
 };
